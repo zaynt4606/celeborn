@@ -73,7 +73,7 @@ class ReducePartitionCommitHandler(
   private val rpcCacheConcurrencyLevel = conf.clientRpcCacheConcurrencyLevel
   private val rpcCacheExpireTime = conf.clientRpcCacheExpireTime
 
-  // noinspection UnstableApiUsage
+  // no inspection Unstable Api Usage
   private val getReducerFileGroupRpcCache: Cache[Int, ByteBuffer] = CacheBuilder.newBuilder()
     .concurrencyLevel(rpcCacheConcurrencyLevel)
     .expireAfterWrite(rpcCacheExpireTime, TimeUnit.MILLISECONDS)

@@ -25,9 +25,10 @@ import org.apache.celeborn.common.identity.UserIdentifier;
 public abstract class FileInfo {
   private final UserIdentifier userIdentifier;
   // whether to split is decided by client side.
-  // now it's just used for mappartition to compatible with old client which can't support split
+  // now it's just used for mapPartition to compatible with old client which can't support split
   private boolean partitionSplitEnabled;
   protected FileMeta fileMeta;
+  /** The set of stream IDs that are fetching this FileInfo. */
   protected final Set<Long> streams = ConcurrentHashMap.newKeySet();
   protected volatile long bytesFlushed;
   private boolean isReduceFileMeta;

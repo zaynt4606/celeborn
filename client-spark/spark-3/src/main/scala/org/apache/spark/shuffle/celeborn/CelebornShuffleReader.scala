@@ -237,7 +237,7 @@ class CelebornShuffleReader[K, C](
                   shuffleClient.reportShuffleFetchFailure(handle.shuffleId, shuffleId)) {
                   throw new FetchFailedException(
                     null,
-                    handle.shuffleId,
+                    shuffleId,
                     -1,
                     -1,
                     partitionId,
@@ -307,6 +307,11 @@ class CelebornShuffleReader[K, C](
     // An interruptible iterator must be used here in order to support task cancellation
     val interruptibleIter = new InterruptibleIterator[(Any, Any)](context, metricIter)
 
+    // Before, we combine the unsorted records, then sort.
+    // When we combine the unsorted records, we us ExternalAppendOnlyMap.
+    // They may spill for large data. Then when we sort, we still spill for large data.
+    // After, when we sort, we can easily organize the same keys together,
+    // and then we no longer have to use ExternalAppendOnlyMap to combine.
     val resultIter: Iterator[Product2[K, C]] = {
       // Sort the output if there is a sort ordering defined.
       if (dep.keyOrdering.isDefined) {
@@ -359,6 +364,43 @@ class CelebornShuffleReader[K, C](
       } else {
         interruptibleIter.asInstanceOf[Iterator[(K, C)]]
       }
+    }
+
+    // agg first and then sort
+    val aggregatedIter: Iterator[Product2[K, C]] =
+      if (dep.aggregator.isDefined) {
+        if (dep.mapSideCombine) {
+          // We are reading values that are already combined
+          val combinedKeyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, C)]]
+          dep.aggregator.get.combineCombinersByKey(combinedKeyValuesIterator, context)
+        } else {
+          // We don't know the value type, but also don't care -- the dependency *should*
+          // have made sure its compatible w/ this aggregator, which will convert the value
+          // type to the combined type C
+          val keyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, Nothing)]]
+          dep.aggregator.get.combineValuesByKey(keyValuesIterator, context)
+        }
+      } else {
+        interruptibleIter.asInstanceOf[Iterator[Product2[K, C]]]
+      }
+
+    // Sort the output if there is a sort ordering defined.
+    val resultIter1 = dep.keyOrdering match {
+      case Some(keyOrd: Ordering[K]) =>
+        // Create an ExternalSorter to sort the data.
+        val sorter =
+          new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
+        sorter.insertAll(aggregatedIter)
+        context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+        context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
+        context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
+        // Use completion callback to stop sorter if task was finished/cancelled.
+        context.addTaskCompletionListener[Unit](_ => {
+          sorter.stop()
+        })
+        CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](sorter.iterator, sorter.stop())
+      case None =>
+        aggregatedIter
     }
 
     resultIter match {

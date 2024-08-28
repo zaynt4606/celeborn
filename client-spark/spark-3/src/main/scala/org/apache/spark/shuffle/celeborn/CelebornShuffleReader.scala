@@ -213,7 +213,7 @@ class CelebornShuffleReader[K, C](
     val end = System.currentTimeMillis()
     logInfo(s"BatchOpenStream for $partCnt cost ${end - startTime}ms")
 
-    // third step: fill streams. key: partitionId; value: CelebornInputStream
+    // streams. key: partitionId; value: CelebornInputStream, record during iterating and prefetching
 
     val streams = new ConcurrentHashMap[Integer, CelebornInputStream]()
 
@@ -257,6 +257,8 @@ class CelebornShuffleReader[K, C](
       }
     }
 
+    // third step: prefetch if needed
+
     val inputStreamCreationWindow = conf.clientInputStreamCreationWindow
     (startPartition until Math.min(
       startPartition + inputStreamCreationWindow,
@@ -267,6 +269,8 @@ class CelebornShuffleReader[K, C](
         }
       })
     })
+
+    // fourth step: iterate to create InputStream and update streams
 
     val recordIter = (startPartition until endPartition).iterator.map(partitionId => {
       if (handle.numMappers > 0) {

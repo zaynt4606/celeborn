@@ -149,6 +149,13 @@ class FetchHandler(
         val pbOpenStreamListResponse = PbOpenStreamListResponse.newBuilder()
         checkAuth(client, Utils.splitShuffleKey(shuffleKey)._1)
         0 until files.size() foreach { idx =>
+
+          // message PbStreamHandlerOpt {
+          //  int32 status = 1;
+          //  PbStreamHandler streamHandler = 2;
+          //  string errorMsg = 3;
+          // }
+
           val pbStreamHandlerOpt = handleReduceOpenStreamInternal(
             client,
             shuffleKey,
@@ -235,6 +242,13 @@ class FetchHandler(
       startIndex: Int,
       endIndex: Int,
       readLocalShuffle: Boolean = false): PbStreamHandlerOpt = {
+
+    // message PbStreamHandlerOpt {
+    //  int32 status = 1;
+    //  PbStreamHandler streamHandler = 2;
+    //  string errorMsg = 3;
+    // }
+
     try {
       logDebug(s"Received open stream request $shuffleKey $fileName $startIndex " +
         s"$endIndex get file name $fileName from client channel " +
@@ -255,6 +269,7 @@ class FetchHandler(
           startIndex,
           endIndex)
       }
+
       val meta = fileInfo.getReduceFileMeta
       val streamHandler =
         if (readLocalShuffle && !fileInfo.isInstanceOf[MemoryFileInfo]) {

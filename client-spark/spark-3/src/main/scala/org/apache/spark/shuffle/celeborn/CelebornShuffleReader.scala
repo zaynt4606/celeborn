@@ -98,6 +98,10 @@ class CelebornShuffleReader[K, C](
       }
     }
 
+    // temp final aim: get locationStreamHandlerMap: ConcurrentHashMap[PartitionLocation, PbStreamHandler]
+    // first step: update ReduceFileGroups and get relevant partitionLocation for shuffleId and partitionId.
+    // to build workerRequestMap
+
     val startTime = System.currentTimeMillis()
     val fetchTimeoutMs = conf.clientFetchTimeoutMs
     val localFetchEnabled = conf.enableReadLocalShuffleFile
@@ -109,6 +113,15 @@ class CelebornShuffleReader[K, C](
     val workerRequestMap = new util.HashMap[
       String,
       (TransportClient, util.ArrayList[PartitionLocation], PbOpenStreamList.Builder)]()
+
+    // message PbOpenStreamList {
+    //  string shuffleKey = 1;
+    //  repeated string fileName = 2;
+    //  repeated int32 startIndex = 3;
+    //  repeated int32 endIndex = 4;
+    //  repeated int32 initialCredit = 5;
+    //  repeated bool readLocalShuffle = 6;
+    // }
 
     var partCnt = 0
 
@@ -139,6 +152,16 @@ class CelebornShuffleReader[K, C](
       }
     }
 
+    // second step: use workerRequestMap to build locationStreamHandlerMap
+    // need to get StreamHandler from FetchHandle in CelebornWorker
+
+    // message PbStreamHandler {
+    //  int64 streamId = 1;
+    //  int32 numChunks = 2;
+    //  repeated int64 chunkOffsets = 3;
+    //  string fullPath = 4;
+    // }
+
     val locationStreamHandlerMap: ConcurrentHashMap[PartitionLocation, PbStreamHandler] =
       JavaUtils.newConcurrentHashMap()
 
@@ -149,6 +172,24 @@ class CelebornShuffleReader[K, C](
           val msg = new TransportMessage(
             MessageType.BATCH_OPEN_STREAM,
             pbOpenStreamListBuilder.build().toByteArray)
+
+          // message PbStreamHandler {
+          //  int64 streamId = 1;
+          //  int32 numChunks = 2;
+          //  repeated int64 chunkOffsets = 3;
+          //  string fullPath = 4;
+          // }
+          //
+          // message PbStreamHandlerOpt {
+          //  int32 status = 1;
+          //  PbStreamHandler streamHandler = 2;
+          //  string errorMsg = 3;
+          // }
+          //
+          // message PbOpenStreamListResponse {
+          //   repeated PbStreamHandlerOpt streamHandlerOpt = 2;
+          // }
+
           val pbOpenStreamListResponse =
             try {
               val response = client.sendRpcSync(msg.toByteBuffer, fetchTimeoutMs)
@@ -171,6 +212,8 @@ class CelebornShuffleReader[K, C](
     futures.foreach(f => f.get())
     val end = System.currentTimeMillis()
     logInfo(s"BatchOpenStream for $partCnt cost ${end - startTime}ms")
+
+    // third step: fill streams. key: partitionId; value: CelebornInputStream
 
     val streams = new ConcurrentHashMap[Integer, CelebornInputStream]()
 

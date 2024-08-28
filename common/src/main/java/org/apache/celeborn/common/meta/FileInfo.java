@@ -78,7 +78,7 @@ public abstract class FileInfo {
 
   public boolean addStream(long streamId) {
     if (!isReduceFileMeta) {
-      throw new IllegalStateException("In addStream, filemeta cannot be MapFileMeta");
+      throw new IllegalStateException("In addStream, fileMeta cannot be MapFileMeta");
     }
     synchronized (getReduceFileMeta().getSorted()) {
       if (getReduceFileMeta().getSorted().get()) {

@@ -95,6 +95,7 @@ public class ShuffleClientImpl extends ShuffleClient {
 
   protected byte[] extension;
 
+  // appShuffleIdentifier = appShuffleId + "-" + context.stageId() + "-" + context.stageAttemptNumber();
   // key: appShuffleIdentifier, value: shuffleId
   protected Map<String, Integer> shuffleIdCache = JavaUtils.newConcurrentHashMap();
 

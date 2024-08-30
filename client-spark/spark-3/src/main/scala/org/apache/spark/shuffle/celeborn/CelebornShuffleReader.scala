@@ -242,6 +242,12 @@ class CelebornShuffleReader[K, C](
             if (throwsFetchFailure) ExceptionMakerHelper.SHUFFLE_FETCH_FAILURE_EXCEPTION_MAKER
             else null,
             locations,
+            // message PbStreamHandler {
+            //  int64 streamId = 1;
+            //  int32 numChunks = 2;
+            //  repeated int64 chunkOffsets = 3;
+            //  string fullPath = 4;
+            // }
             streamHandlers,
             fileGroups.mapAttempts,
             metricsCallback)

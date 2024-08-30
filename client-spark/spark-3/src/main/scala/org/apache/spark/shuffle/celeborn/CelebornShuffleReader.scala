@@ -123,6 +123,40 @@ class CelebornShuffleReader[K, C](
     //  repeated bool readLocalShuffle = 6;
     // }
 
+    // before batch
+    val streams1 = new ConcurrentHashMap[Integer, CelebornInputStream]()
+    (startPartition until endPartition).map(partitionId => {
+      streamCreatorPool.submit(new Runnable {
+        override def run(): Unit = {
+          if (exceptionRef.get() == null) {
+            try {
+              val inputStream = shuffleClient.readPartition(
+                shuffleId,
+                handle.shuffleId,
+                partitionId,
+                context.attemptNumber(),
+                startMapIndex,
+                endMapIndex,
+                if (throwsFetchFailure) ExceptionMakerHelper.SHUFFLE_FETCH_FAILURE_EXCEPTION_MAKER
+                else null,
+                null,
+                null,
+                fileGroups.mapAttempts,
+                metricsCallback)
+              streams1.put(partitionId, inputStream)
+            } catch {
+              case e: IOException =>
+                logError(s"Exception caught when readPartition $partitionId!", e)
+                exceptionRef.compareAndSet(null, e)
+              case e: Throwable =>
+                logError(s"Non IOException caught when readPartition $partitionId!", e)
+                exceptionRef.compareAndSet(null, new CelebornIOException(e))
+            }
+          }
+        }
+      })
+    })
+
     var partCnt = 0
 
     (startPartition until endPartition).foreach { partitionId =>

@@ -229,6 +229,21 @@ abstract class CommitHandler(
         status.message.replicaIds)
     }
 
+    //   case class CommitFilesResponse(
+    //      status: StatusCode,
+    //      committedPrimaryIds: util.List[String],
+    //      committedReplicaIds: util.List[String],
+    //      failedPrimaryIds: util.List[String],
+    //      failedReplicaIds: util.List[String],
+    //      committedPrimaryStorageInfos: util.Map[String, StorageInfo] =
+    //        Map.empty[String, StorageInfo].asJava,
+    //      committedReplicaStorageInfos: util.Map[String, StorageInfo] =
+    //        Map.empty[String, StorageInfo].asJava,
+    //      committedMapIdBitMap: util.Map[String, RoaringBitmap] =
+    //        Map.empty[String, RoaringBitmap].asJava,
+    //      totalWritten: Long = 0,
+    //      fileCount: Int = 0) extends WorkerMessage
+
     def processResponse(res: CommitFilesResponse, worker: WorkerInfo): Unit = {
       shuffleCommittedInfo.synchronized {
         // record committed partitionIds
@@ -412,7 +427,7 @@ abstract class CommitHandler(
         partition.setPeer(null)
         replicaPartMap.put(partition.getUniqueId, partition)
       }
-
+      // uniqueId
       val (primaryIds, replicaIds) = shuffleCommittedInfo.synchronized {
         (
           primaryParts.asScala

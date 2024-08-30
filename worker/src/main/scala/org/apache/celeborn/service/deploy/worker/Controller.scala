@@ -388,8 +388,8 @@ private[deploy] class Controller(
 
     // Reply SHUFFLE_NOT_REGISTERED if shuffleKey does not exist AND the shuffle is not committed.
     // Say the first CommitFiles-epoch request succeeds in Worker and removed from partitionLocationInfo,
-    // but for some reason the client thinks it's failed, the client will trigger again, so we should
-    // check whether the CommitFiles-epoch is already committed here.
+    // but for some reason the client thinks it's failed, the client will trigger again,
+    // so we should check whether the CommitFiles-epoch is already committed here.
     if (!partitionLocationInfo.containsShuffle(shuffleKey) && !alreadyCommitted(
         shuffleKey,
         epoch)) {
@@ -406,8 +406,18 @@ private[deploy] class Controller(
 
     val shuffleCommitTimeout = conf.workerShuffleCommitTimeout
 
+    //  shuffleKey -> (epoch -> CommitInfo)
+    //  var shuffleCommitInfos: ConcurrentHashMap[String, ConcurrentHashMap[Long, CommitInfo]]
+
     shuffleCommitInfos.putIfAbsent(shuffleKey, JavaUtils.newConcurrentHashMap[Long, CommitInfo]())
     val epochCommitMap = shuffleCommitInfos.get(shuffleKey)
+
+    // class CommitInfo(var response: CommitFilesResponse, var status: Int)
+    // object CommitInfo {
+    //   val COMMIT_NOTSTARTED: Int = 0
+    //   val COMMIT_INPROCESS: Int = 1
+    //   val COMMIT_FINISHED: Int = 2
+    // }
     epochCommitMap.putIfAbsent(epoch, new CommitInfo(null, CommitInfo.COMMIT_NOTSTARTED))
     val commitInfo = epochCommitMap.get(epoch)
 
@@ -426,6 +436,7 @@ private[deploy] class Controller(
       }
     }
 
+    // check whether commitInfo.status is finished every delta time
     commitInfo.synchronized {
       if (commitInfo.status == CommitInfo.COMMIT_FINISHED) {
         logInfo(s"$shuffleKey CommitFinished, just return the response")

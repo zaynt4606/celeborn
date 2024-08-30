@@ -62,9 +62,9 @@ public final class ReducePartitionDataWriter extends PartitionDataWriter {
     // we should check if the chunk offset boundary equals
     // bytesFlush or not. For example:
     // The last record is a giant record and it has been flushed
-    // but its size is smaller than the nextBoundary, then the
-    // chunk offset will not be set after flushing. we should
-    // set it during FileWriter close.
+    // but its size is smaller than the nextBoundary,
+    // then the chunk offset will not be set after flushing.
+    // we should set it during FileWriter close.
     if (diskFileInfo != null) {
       return (diskFileInfo.getReduceFileMeta()).getLastChunkOffset()
           == diskFileInfo.getFileLength();

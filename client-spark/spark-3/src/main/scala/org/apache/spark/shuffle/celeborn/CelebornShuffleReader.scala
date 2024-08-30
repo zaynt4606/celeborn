@@ -21,18 +21,15 @@ import java.io.IOException
 import java.util
 import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
-
 import scala.collection.JavaConverters._
-
 import org.apache.spark.{Aggregator, InterruptibleIterator, ShuffleDependency, TaskContext}
 import org.apache.spark.celeborn.ExceptionMakerHelper
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.shuffle.{FetchFailedException, ShuffleReader, ShuffleReadMetricsReporter}
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter, ShuffleReader}
 import org.apache.spark.shuffle.celeborn.CelebornShuffleReader.streamCreatorPool
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
-
 import org.apache.celeborn.client.ShuffleClient
 import org.apache.celeborn.client.read.{CelebornInputStream, MetricsCallback}
 import org.apache.celeborn.common.CelebornConf
@@ -42,6 +39,9 @@ import org.apache.celeborn.common.network.protocol.TransportMessage
 import org.apache.celeborn.common.protocol.{MessageType, PartitionLocation, PbOpenStreamList, PbOpenStreamListResponse, PbStreamHandler}
 import org.apache.celeborn.common.protocol.message.StatusCode
 import org.apache.celeborn.common.util.{JavaUtils, ThreadUtils, Utils}
+
+import scala.collection.Iterator
+import scala.reflect.ClassTag.Any
 
 class CelebornShuffleReader[K, C](
     handle: CelebornShuffleHandle[K, _, C],
@@ -324,6 +324,7 @@ class CelebornShuffleReader[K, C](
     }.flatMap { case (partitionId, iter) =>
       try {
         iter
+//        modifyIter(iter)
       } catch {
         case e @ (_: CelebornIOException | _: PartitionUnRetryAbleException) =>
           if (throwsFetchFailure &&
@@ -340,6 +341,10 @@ class CelebornShuffleReader[K, C](
             throw e
       }
     }
+
+//    def modifyIter(iter: Iterator[(Any)]):Iterator[(Any)] = {
+//        iter
+//    }
 
     val iterWithUpdatedRecordsRead =
       recordIter.map { record =>

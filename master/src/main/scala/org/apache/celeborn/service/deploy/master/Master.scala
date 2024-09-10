@@ -96,10 +96,11 @@ private[celeborn] class Master(
         RpcNameConstants.MASTER_SYS,
         TransportModuleConstants.RPC_SERVICE_MODULE,
         masterArgs.host,
-        masterArgs.host,
         masterArgs.port,
         conf,
-        Math.max(64, Runtime.getRuntime.availableProcessors()))
+        Math.max(64, Runtime.getRuntime.availableProcessors()),
+        None,
+        None)
     } else {
       val externalSecurityContext = new RpcSecurityContextBuilder()
         .withServerSaslContext(
@@ -112,11 +113,11 @@ private[celeborn] class Master(
         RpcNameConstants.MASTER_SYS,
         TransportModuleConstants.RPC_SERVICE_MODULE,
         masterArgs.host,
-        masterArgs.host,
         masterArgs.port,
         conf,
         Math.max(64, Runtime.getRuntime.availableProcessors()),
-        Some(externalSecurityContext))
+        Some(externalSecurityContext),
+        None)
     }
 
   // Visible for testing
@@ -130,10 +131,11 @@ private[celeborn] class Master(
         RpcNameConstants.MASTER_INTERNAL_SYS,
         TransportModuleConstants.RPC_SERVICE_MODULE,
         masterArgs.host,
-        masterArgs.host,
         masterArgs.internalPort,
         conf,
-        Math.max(64, Runtime.getRuntime.availableProcessors()))
+        Math.max(64, Runtime.getRuntime.availableProcessors()),
+        None,
+        None)
     }
 
   private val rackResolver = new CelebornRackResolver(conf)
@@ -226,6 +228,11 @@ private[celeborn] class Master(
   masterSource.addGauge(MasterSource.LOST_WORKER_COUNT) { () => statusSystem.lostWorkers.size }
   masterSource.addGauge(MasterSource.EXCLUDED_WORKER_COUNT) { () =>
     statusSystem.excludedWorkers.size + statusSystem.manuallyExcludedWorkers.size
+  }
+  masterSource.addGauge(MasterSource.AVAILABLE_WORKER_COUNT) { () =>
+    statusSystem.workers.asScala.count { w =>
+      statusSystem.isWorkerAvailable(w)
+    }
   }
   masterSource.addGauge(MasterSource.SHUTDOWN_WORKER_COUNT) { () =>
     statusSystem.shutdownWorkers.size

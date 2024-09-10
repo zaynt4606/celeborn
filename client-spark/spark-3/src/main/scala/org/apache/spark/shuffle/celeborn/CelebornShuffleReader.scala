@@ -21,15 +21,18 @@ import java.io.IOException
 import java.util
 import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
+
 import scala.collection.JavaConverters._
+
 import org.apache.spark.{Aggregator, InterruptibleIterator, ShuffleDependency, TaskContext}
 import org.apache.spark.celeborn.ExceptionMakerHelper
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter, ShuffleReader}
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleReader, ShuffleReadMetricsReporter}
 import org.apache.spark.shuffle.celeborn.CelebornShuffleReader.streamCreatorPool
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
+
 import org.apache.celeborn.client.ShuffleClient
 import org.apache.celeborn.client.read.{CelebornInputStream, MetricsCallback}
 import org.apache.celeborn.common.CelebornConf
@@ -39,9 +42,6 @@ import org.apache.celeborn.common.network.protocol.TransportMessage
 import org.apache.celeborn.common.protocol.{MessageType, PartitionLocation, PbOpenStreamList, PbOpenStreamListResponse, PbStreamHandler}
 import org.apache.celeborn.common.protocol.message.StatusCode
 import org.apache.celeborn.common.util.{JavaUtils, ThreadUtils, Utils}
-
-import scala.collection.Iterator
-import scala.reflect.ClassTag.Any
 
 class CelebornShuffleReader[K, C](
     handle: CelebornShuffleHandle[K, _, C],
@@ -99,10 +99,6 @@ class CelebornShuffleReader[K, C](
       }
     }
 
-    // temp final aim: get locationStreamHandlerMap: ConcurrentHashMap[PartitionLocation, PbStreamHandler]
-    // first step: update ReduceFileGroups and get relevant partitionLocation for shuffleId and partitionId.
-    // to build workerRequestMap
-
     val startTime = System.currentTimeMillis()
     val fetchTimeoutMs = conf.clientFetchTimeoutMs
     val localFetchEnabled = conf.enableReadLocalShuffleFile
@@ -114,49 +110,6 @@ class CelebornShuffleReader[K, C](
     val workerRequestMap = new util.HashMap[
       String,
       (TransportClient, util.ArrayList[PartitionLocation], PbOpenStreamList.Builder)]()
-
-    // message PbOpenStreamList {
-    //  string shuffleKey = 1;
-    //  repeated string fileName = 2;
-    //  repeated int32 startIndex = 3;
-    //  repeated int32 endIndex = 4;
-    //  repeated int32 initialCredit = 5;
-    //  repeated bool readLocalShuffle = 6;
-    // }
-
-    // before batch
-    val streams1 = new ConcurrentHashMap[Integer, CelebornInputStream]()
-    (startPartition until endPartition).map(partitionId => {
-      streamCreatorPool.submit(new Runnable {
-        override def run(): Unit = {
-          if (exceptionRef.get() == null) {
-            try {
-              val inputStream = shuffleClient.readPartition(
-                shuffleId,
-                handle.shuffleId,
-                partitionId,
-                context.attemptNumber(),
-                startMapIndex,
-                endMapIndex,
-                if (throwsFetchFailure) ExceptionMakerHelper.SHUFFLE_FETCH_FAILURE_EXCEPTION_MAKER
-                else null,
-                null,
-                null,
-                fileGroups.mapAttempts,
-                metricsCallback)
-              streams1.put(partitionId, inputStream)
-            } catch {
-              case e: IOException =>
-                logError(s"Exception caught when readPartition $partitionId!", e)
-                exceptionRef.compareAndSet(null, e)
-              case e: Throwable =>
-                logError(s"Non IOException caught when readPartition $partitionId!", e)
-                exceptionRef.compareAndSet(null, new CelebornIOException(e))
-            }
-          }
-        }
-      })
-    })
 
     var partCnt = 0
 
@@ -187,16 +140,6 @@ class CelebornShuffleReader[K, C](
       }
     }
 
-    // second step: use workerRequestMap to build locationStreamHandlerMap
-    // need to get StreamHandler from FetchHandle in CelebornWorker
-
-    // message PbStreamHandler {
-    //  int64 streamId = 1;
-    //  int32 numChunks = 2;
-    //  repeated int64 chunkOffsets = 3;
-    //  string fullPath = 4;
-    // }
-
     val locationStreamHandlerMap: ConcurrentHashMap[PartitionLocation, PbStreamHandler] =
       JavaUtils.newConcurrentHashMap()
 
@@ -207,24 +150,6 @@ class CelebornShuffleReader[K, C](
           val msg = new TransportMessage(
             MessageType.BATCH_OPEN_STREAM,
             pbOpenStreamListBuilder.build().toByteArray)
-
-          // message PbStreamHandler {
-          //  int64 streamId = 1;
-          //  int32 numChunks = 2;
-          //  repeated int64 chunkOffsets = 3;
-          //  string fullPath = 4;
-          // }
-          //
-          // message PbStreamHandlerOpt {
-          //  int32 status = 1;
-          //  PbStreamHandler streamHandler = 2;
-          //  string errorMsg = 3;
-          // }
-          //
-          // message PbOpenStreamListResponse {
-          //   repeated PbStreamHandlerOpt streamHandlerOpt = 2;
-          // }
-
           val pbOpenStreamListResponse =
             try {
               val response = client.sendRpcSync(msg.toByteBuffer, fetchTimeoutMs)
@@ -247,8 +172,6 @@ class CelebornShuffleReader[K, C](
     futures.foreach(f => f.get())
     val end = System.currentTimeMillis()
     logInfo(s"BatchOpenStream for $partCnt cost ${end - startTime}ms")
-
-    // streams. key: partitionId; value: CelebornInputStream, record during iterating and prefetching
 
     val streams = new ConcurrentHashMap[Integer, CelebornInputStream]()
 
@@ -277,12 +200,6 @@ class CelebornShuffleReader[K, C](
             if (throwsFetchFailure) ExceptionMakerHelper.SHUFFLE_FETCH_FAILURE_EXCEPTION_MAKER
             else null,
             locations,
-            // message PbStreamHandler {
-            //  int64 streamId = 1;
-            //  int32 numChunks = 2;
-            //  repeated int64 chunkOffsets = 3;
-            //  string fullPath = 4;
-            // }
             streamHandlers,
             fileGroups.mapAttempts,
             metricsCallback)
@@ -298,8 +215,6 @@ class CelebornShuffleReader[K, C](
       }
     }
 
-    // third step: prefetch if needed
-
     val inputStreamCreationWindow = conf.clientInputStreamCreationWindow
     (startPartition until Math.min(
       startPartition + inputStreamCreationWindow,
@@ -310,8 +225,6 @@ class CelebornShuffleReader[K, C](
         }
       })
     })
-
-    // fourth step: iterate to create InputStream and update streams
 
     val recordIter = (startPartition until endPartition).iterator.map(partitionId => {
       if (handle.numMappers > 0) {
@@ -325,7 +238,7 @@ class CelebornShuffleReader[K, C](
                   shuffleClient.reportShuffleFetchFailure(handle.shuffleId, shuffleId)) {
                   throw new FetchFailedException(
                     null,
-                    shuffleId,
+                    handle.shuffleId,
                     -1,
                     -1,
                     partitionId,
@@ -365,7 +278,6 @@ class CelebornShuffleReader[K, C](
     }.flatMap { case (partitionId, iter) =>
       try {
         iter
-//        modifyIter(iter)
       } catch {
         case e @ (_: CelebornIOException | _: PartitionUnRetryAbleException) =>
           if (throwsFetchFailure &&
@@ -383,10 +295,6 @@ class CelebornShuffleReader[K, C](
       }
     }
 
-//    def modifyIter(iter: Iterator[(Any)]):Iterator[(Any)] = {
-//        iter
-//    }
-
     val iterWithUpdatedRecordsRead =
       recordIter.map { record =>
         metrics.incRecordsRead(1)
@@ -400,11 +308,6 @@ class CelebornShuffleReader[K, C](
     // An interruptible iterator must be used here in order to support task cancellation
     val interruptibleIter = new InterruptibleIterator[(Any, Any)](context, metricIter)
 
-    // Before, we combine the unsorted records, then sort.
-    // When we combine the unsorted records, we us ExternalAppendOnlyMap.
-    // They may spill for large data. Then when we sort, we still spill for large data.
-    // After, when we sort, we can easily organize the same keys together,
-    // and then we no longer have to use ExternalAppendOnlyMap to combine.
     val resultIter: Iterator[Product2[K, C]] = {
       // Sort the output if there is a sort ordering defined.
       if (dep.keyOrdering.isDefined) {
@@ -457,43 +360,6 @@ class CelebornShuffleReader[K, C](
       } else {
         interruptibleIter.asInstanceOf[Iterator[(K, C)]]
       }
-    }
-
-    // agg first and then sort
-    val aggregatedIter: Iterator[Product2[K, C]] =
-      if (dep.aggregator.isDefined) {
-        if (dep.mapSideCombine) {
-          // We are reading values that are already combined
-          val combinedKeyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, C)]]
-          dep.aggregator.get.combineCombinersByKey(combinedKeyValuesIterator, context)
-        } else {
-          // We don't know the value type, but also don't care -- the dependency *should*
-          // have made sure its compatible w/ this aggregator, which will convert the value
-          // type to the combined type C
-          val keyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, Nothing)]]
-          dep.aggregator.get.combineValuesByKey(keyValuesIterator, context)
-        }
-      } else {
-        interruptibleIter.asInstanceOf[Iterator[Product2[K, C]]]
-      }
-
-    // Sort the output if there is a sort ordering defined.
-    val resultIter1 = dep.keyOrdering match {
-      case Some(keyOrd: Ordering[K]) =>
-        // Create an ExternalSorter to sort the data.
-        val sorter =
-          new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
-        sorter.insertAll(aggregatedIter)
-        context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
-        context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
-        context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
-        // Use completion callback to stop sorter if task was finished/cancelled.
-        context.addTaskCompletionListener[Unit](_ => {
-          sorter.stop()
-        })
-        CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](sorter.iterator, sorter.stop())
-      case None =>
-        aggregatedIter
     }
 
     resultIter match {

@@ -458,6 +458,7 @@ private[celeborn] class Master(
       val shuffleIds = pb.getShuffleIdsList.asScala.toList
       val requestId = pb.getRequestId
       logDebug(s"Received UnregisterShuffle request $requestId, $applicationId, $shuffleIds")
+      logInfo(s"Received UnregisterShuffle request $requestId, $applicationId, $shuffleIds")
       checkAuth(context, applicationId)
       executeWithLeaderChecker(
         context,

@@ -4457,7 +4457,7 @@ object CelebornConf extends Logging {
       .version("0.6.0")
       .doc("This is an optimization on remove Expired Shuffles and it's true by default.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val CLIENT_BATCH_HANDLE_CHANGE_PARTITION_BUCKETS: ConfigEntry[Int] =
     buildConf("celeborn.client.shuffle.batchHandleChangePartition.partitionBuckets")

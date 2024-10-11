@@ -200,7 +200,10 @@ function build_spark_client {
   mkdir -p "$DIST_DIR/spark"
 
   ## Copy spark client jars
-  cp "$PROJECT_DIR"/client-spark/spark-$SPARK_MAJOR_VERSION-shaded/target/celeborn-client-spark-${SPARK_MAJOR_VERSION}-shaded_$SCALA_VERSION-$VERSION.jar "$DIST_DIR/spark/"
+  SOURCE_FILE="$PROJECT_DIR/client-spark/spark-$SPARK_MAJOR_VERSION-shaded/target/celeborn-client-spark-${SPARK_MAJOR_VERSION}-shaded_$SCALA_VERSION-$VERSION.jar"
+  DESTINATION_DIR="$DIST_DIR/spark"
+  DESTINATION_FILE="celeborn-client-spark-${SPARK_VERSION}-shaded_$SCALA_VERSION-$VERSION.jar"
+  cp "$SOURCE_FILE" "$DESTINATION_DIR/$DESTINATION_FILE"
 }
 
 function build_flink_client {

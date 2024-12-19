@@ -1774,7 +1774,6 @@ public class ShuffleClientImpl extends ShuffleClient {
                     response.fileGroup(), response.attempts(), response.partitionIds()),
                 null);
           case STAGE_END_TIME_OUT:
-            break;
           case SHUFFLE_DATA_LOST:
             exceptionMsg =
                 String.format(

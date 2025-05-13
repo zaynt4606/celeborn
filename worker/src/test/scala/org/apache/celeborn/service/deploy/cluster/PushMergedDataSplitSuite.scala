@@ -83,11 +83,11 @@ class PushMergedDataSplitSuite extends AnyFunSuite
           PARTITION_NUM)
 
         // find the worker that has at least 2 partitions
-        val partitionLocationMap =
-          shuffleClient.getPartitionLocation(SHUFFLE_ID, MAP_NUM, PARTITION_NUM)
+        val locationManager = shuffleClient.getLocationManager
         val worker2PartitionIds = mutable.Map.empty[WorkerInfo, ArrayBuffer[Int]]
         for (partitionId <- 0 until PARTITION_NUM) {
-          val partitionLocation = partitionLocationMap.get(partitionId)
+          val partitionLocation =
+            locationManager.getLatestPartitionLocation(SHUFFLE_ID, partitionId)
           worker2PartitionIds
             .getOrElseUpdate(partitionLocation.getWorker, ArrayBuffer.empty)
             .append(partitionId)
@@ -148,14 +148,14 @@ class PushMergedDataSplitSuite extends AnyFunSuite
           Thread.sleep(5 * 1000) // wait for flush
         }
         assert(
-          partitionLocationMap.get(partitions(0)).getEpoch > 0
+          locationManager.getMaxEpoch(SHUFFLE_ID, partitions(0)) > 0
         ) // means partition(0) will be split
 
         // push merged data, we expect that partition(0) will be split, while partition(1) will not be split
         shuffleClient.pushMergedData(SHUFFLE_ID, MAP_ID, ATTEMPT_ID)
         shuffleClient.mapperEnd(SHUFFLE_ID, MAP_ID, ATTEMPT_ID, MAP_NUM)
         assert(
-          partitionLocationMap.get(partitions(1)).getEpoch == 0
+          locationManager.getMaxEpoch(SHUFFLE_ID, partitions(1)) == 0
         ) // means partition(1) will not be split
     }
   }

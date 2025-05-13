@@ -40,7 +40,7 @@ case class ChangeLocationsCallContext(
   extends RequestLocationCallContext with Logging {
   val endedMapIds = new util.HashSet[Integer]()
   val newLocs =
-    JavaUtils.newConcurrentHashMap[Integer, (StatusCode, Boolean, PartitionLocation)](
+    JavaUtils.newConcurrentHashMap[Integer, (StatusCode, Boolean, Seq[PartitionLocation])](
       partitionCount)
 
   def markMapperEnd(mapId: Int): Unit = this.synchronized {
@@ -55,7 +55,14 @@ case class ChangeLocationsCallContext(
     if (newLocs.containsKey(partitionId)) {
       logError(s"PartitionId $partitionId already exists!")
     }
-    newLocs.put(partitionId, (status, available, partitionLocationOpt.getOrElse(null)))
+    // TODO fix later
+    val partitionLocationSeq =
+      if (partitionLocationOpt.isEmpty) {
+        null
+      } else {
+        Seq(partitionLocationOpt.get)
+      }
+    newLocs.put(partitionId, (status, available, partitionLocationSeq))
 
     if (newLocs.size() == partitionCount || StatusCode.SHUFFLE_NOT_REGISTERED == status
       || StatusCode.STAGE_ENDED == status) {
